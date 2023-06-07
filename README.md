@@ -1,6 +1,6 @@
 # ATtiny212 VGA Tetris
 
-This project utilizes an ATtiny212 microcontroller to generate a VGA signal and play Tetris on a VGA monitor. By bit-banging the necessary signals, the microcontroller generates the VGA signal. The implemented game is a version of Tetris inspired by the one found on the Nintendo NES. The ATtiny212 microcontroller operates at 20 MHz, has 2k of flash, 128 bytes of RAM, and 8 pins. The game's code was written in C with some inline assembly.
+This project utilizes an ATtiny212 microcontroller to generate a VGA signal and play Tetris on a VGA monitor. By bit-banging the necessary signals, the microcontroller generates the VGA signal. The implemented game is a version of Tetris inspired by the one found on the Nintendo NES. The ATtiny212 microcontroller operates at 20 MHz, has 2k of flash, 128 bytes of RAM, and 8 pins. The game's code was written in C with some inline assembly. The project is a PlatformIO project.
 
 ## Hardware Requirements
 
