@@ -1,0 +1,1 @@
+This project uses PlatformIO and the code is located in the `/src/main.c` file. Additionally, there is a `code.asm` file that contains the disassembled code, which can be helpful for debugging purposes. To generate the `code.asm` file, simply compile the code and run the `disassemble.py` script.
