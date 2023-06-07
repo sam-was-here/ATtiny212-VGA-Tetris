@@ -41,6 +41,11 @@ The game logic handles the Tetris gameplay, including piece movement, rotation, 
 - [VGA Timing Information](http://tinyvga.com/vga-timing/800x600@60Hz)
 - [UPDI Programmer](https://github.com/ElTangas/jtag2updi)
 
+## Images
+![IMG_20230606_214637](https://github.com/sam-was-here/ATtiny212-VGA-Tetris/assets/102840190/99ce1e24-f863-4edf-a12d-522c3afe5c8f)
+![IMG_20230606_214746](https://github.com/sam-was-here/ATtiny212-VGA-Tetris/assets/102840190/97aad25b-e29c-4dd3-8988-5a7ff15db940)
+
+
 ## Future Improvements
 
 In the future, the project may be expanded to include other games, such as Space Invaders, using the ATtiny212 microcontroller.
