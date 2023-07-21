@@ -1,4 +1,4 @@
-/* 
+/*
   <this program makes a ATtiny212 output a vga signal to play tetris>
   Copyright (C) <2023>  <Samual Kim>
 
@@ -35,7 +35,8 @@
 #include <compiler.h>
 
 // uncomment for some debug info
-// #define DEBUG
+// #define DEBUG    // enables debuging
+// #define EXT_CLK  // enables extranl clock
 
 // pin defunitions
 #define COLOR_PIN PIN7_bm
@@ -518,6 +519,7 @@ int main(void)
                    | 0 << TCD_CMPCEN_bp /* Compare C enable: disabled */
                    | 0 << TCD_CMPD_bp   /* Compare D vaule: disabled */
                    | 0 << TCD_CMPDEN_bp /* Compare D enable: disabled */);
+
   TCD0.INTCTRL = 1 << TCD_OVF_bp      /* Overflow interrupt enable: enabled */
                  | 0 << TCD_TRIGA_bp  /* Trigger A interrupt enable: enabled */
                  | 0 << TCD_TRIGB_bp; /* Trigger B interrupt enable: enabled */
@@ -540,11 +542,6 @@ int main(void)
   // CPUINT.LVL1VEC = 0x0 << CPUINT_LVL1VEC_gp; /* Interrupt Vector with High Priority: 0x0 */
 
   ENABLE_INTERRUPTS();
-  // set up clock
-  ccp_write_io((void *)&(CLKCTRL.MCLKCTRLB),
-               CLKCTRL_PDIV_6X_gc /* 6 */
-                   | 0 << CLKCTRL_PEN_bp /* Prescaler enable: disabled */);
-  // atmel_start_init();
 
   // set up events,
   EVSYS.SYNCCH0 = EVSYS_SYNCCH0_PORTA_PIN6_gc;  /* Synchronous Event from Pin PA6 */
@@ -559,9 +556,23 @@ int main(void)
   ADC0.CTRLC = 0b01010011;
   // ADC0.CTRLD = 0b00010000;
   SLPCTRL.CTRLA = 1; // enable sleep
-  // this part of the adc set up is done in TCD0 OVF int to save space and waste time there
-  // ADC0.MUXPOS = 0x02; // adc0 input is pin 2
-  // ADC0.COMMAND = 1;   // adc start running
+                     // this part of the adc set up is done in TCD0 OVF int to save space and waste time there
+                     // ADC0.MUXPOS = 0x02; // adc0 input is pin 2
+                     // ADC0.COMMAND = 1;   // adc start running
+
+  // set up clock
+  ccp_write_io((void *)&(CLKCTRL.MCLKCTRLB),
+               CLKCTRL_PDIV_6X_gc /* 6 */
+                   | 0 << CLKCTRL_PEN_bp /* Prescaler enable: disabled */);
+  // change clock to extranl
+
+#ifdef EXT_CLK
+  ccp_write_io((void *)&(CLKCTRL.MCLKCTRLA),
+               CLKCTRL_CLKSEL_EXTCLK_gc /* External Clock (EXTCLK) */
+                   | 0 << CLKCTRL_CLKOUT_bp /* System clock out: disabled */);
+// 	while (CLKCTRL.MCLKSTATUS & CLKCTRL_SOSC_bm) {
+// }
+#endif
 
   while (1)
   {
