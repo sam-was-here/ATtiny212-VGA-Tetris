@@ -35,8 +35,8 @@
 #include <compiler.h>
 
 // uncomment for some debug info
-// #define DEBUG    // enables debuging
-// #define EXT_CLK  // enables extranl clock
+// #define DEBUG   // enables debuging
+#define EXT_CLK // enables extranl clock
 
 // pin defunitions
 #define COLOR_PIN PIN7_bm
@@ -57,14 +57,16 @@ uint8_t peiceCounter;        // how many piece have been put down
 int8_t xPos = 3;             // the x pos of the piece, range is -2 to 8
 int8_t yPos = 20;            // the y pos of piece, range is -1 to 20
 uint8_t rotation = 0;        // the current rotation of the peice on board
-uint8_t peice = 0;           // the current peice on board
+uint8_t peice = 6;           // the current peice on board
 uint8_t updateTime = 48;     // how many frames a cycle takes
 uint8_t level;               // the level the game is on
 int8_t DAScount;             // used to keep take when button needs to auto repete
 int8_t buttonHoldCount;      // how many frames a button was being couniesly being pressed
-uint16_t playFeild[20] = {}; // holds all the block on play feild (10*20 blocks)
+uint16_t playFeild[21] = {}; // holds all the block on play feild (10*20 blocks), 21 to help with reseting the game
 uint8_t scoreNum[6];         // hold the sorce in BCD format (unused)
 uint8_t lineNum[3];          // hold the line cleared in BCD format (unused)
+uint8_t nextPiece;           // the next pecie to be shown
+uint8_t lineCleared;         // how many lines have ben cleared
 
 // game pieces, bottom left is lsb, top right is msb (all peices are 4*4)
 // using nintendo rotation system
@@ -150,20 +152,25 @@ const uint8_t numberPattern[12] = {
 uint16_t patternMaskMaker(int8_t xPos, int8_t peiceRow)
 {
   // put bits in correct row
-  uint16_t patternMask = ((pattern[peice][rotation] >> ((peiceRow)*4)) & 0xf);
+  uint16_t patternMask; //= ((pattern[peice][rotation] >> ((peiceRow)*4)) & 0xf);
 
   if (peiceRow < 0 || peiceRow > 3) // check to see if peiceRow is neg
   {
     patternMask = 0; // negaitve peiceRow with return 0
   }
-  // move bit to right part of the row
-  else if (xPos < 0)
-  {
-    patternMask = patternMask >> (xPos * -1);
-  }
   else
   {
-    patternMask = patternMask << (xPos);
+    patternMask = ((pattern[peice][rotation] >> ((peiceRow)*4)) & 0xf);
+
+    // move bit to right part of the row
+    if (xPos < 0)
+    {
+      patternMask = patternMask >> (xPos * -1);
+    }
+    else
+    {
+      patternMask = patternMask << (xPos);
+    }
   }
   return patternMask;
 }
@@ -175,9 +182,9 @@ uint8_t validMove(int8_t newxPos, int8_t newyPos)
   for (int8_t i = 0; i < 4; i++)
   {
     uint16_t patternMask = (patternMaskMaker(newxPos + 2, i));
-    if ((newyPos + i) < 0)
+    if ((newyPos + i) < 0) // see if ypos is negitive
     {
-      if ((patternMask & 0xffff))
+      if ((patternMask & 0xffff)) // if part of the pice is below the game field, it not vaild
       {
         return 0;
       }
@@ -196,24 +203,40 @@ void gameLogic()
   frameCounter++;
   // checks for user inputs
   buttonStatus = buttonStatus << 4; // holdes states of button from this and last frame
-  uint8_t adcRead = ADC0.RESL >> 4; // hold adc value, and lower it resolution
-  uint8_t buttonStatusMask = 0;     // hold state of current button state
+  uint8_t adcRNG = ADC0.RESL;       // hold adc value, lower 8 bits, used to RND
+  uint8_t adcRead = ADC0.RESH;      // hold adc value, holds top 2 bits, used to see what button is pressed
+  // adcRead = adcRead << 2;
 
-  if (adcRead == 0) // button 0 is pressed
+  // adcRNG = adcRNG & 0xf;
+  // uint8_t adcRNG = ADC0.RESL;       // hold adc value, and lower it resolution
+  // uint8_t adcRead = adcRNG >> 4;    // hold adc value, and lower it resolution
+  // adcRNG = adcRNG & 0xf;
+
+// adcRead holds the top 4 bits of the ADC, (bits are not in order)
+  // puts 2 bit of data in adcRead to get the right button data
+  asm volatile(
+      "BST %0,7\n"
+      "BLD %1,3\n"
+      "BST %0,6\n"
+      "BLD %1,2\n"
+      : "+r"((uint8_t)(adcRNG)), "+r"((uint8_t)(adcRead)));
+  uint8_t buttonStatusMask = 0; // hold state of current button state
+
+  if (adcRead == 0) // rotate button
   {
-    buttonStatusMask = 8;
+    buttonStatusMask = 2;
   }
-  if (adcRead == 8 || adcRead == 7)
-  {
-    buttonStatusMask = 1;
-  }
-  if ((adcRead > 14))
+  if (adcRead == 2) // down button
   {
     buttonStatusMask = 4;
   }
-  if (adcRead == 10)
+  if ((adcRead > 14)) // right button
   {
-    buttonStatusMask = 2;
+    buttonStatusMask = 1;
+  }
+  if (adcRead == 10) // left button
+  {
+    buttonStatusMask = 8;
   }
 
   buttonStatus = buttonStatus | buttonStatusMask;
@@ -223,17 +246,17 @@ void gameLogic()
 
   switch (buttonStatus) //((buttonStatus & 0xf) & ~(buttonStatus >> 4)) //& ~(buttonStatus >> 8))
   {
-  case 1:
+  case 1: // press right button
     value = validMove(xPos + 1, yPos);
     xPos = xPos + value;
     DAScount = 16;
     break;
-  case 8:
+  case 8: // press left button
     value = validMove(xPos - 1, yPos);
     xPos = xPos - value;
     DAScount = 16;
     break;
-  case 2:
+  case 2: // press rotate button
     rotation++;
     rotation = rotation & 3;
     if (validMove(xPos, yPos) == 0) //    if (validMove(xPos, yPos) != 1)
@@ -242,7 +265,7 @@ void gameLogic()
       rotation = rotation & 3;
     }
     break;
-  case 4:
+  case 4: // press down button
     frameCounter = updateTime + 1;
     DAScount = 6;
     break;
@@ -298,7 +321,7 @@ void gameLogic()
       uint16_t patternMask;
       for (int8_t i = 0; i <= 3; i++)
       {
-        if (yPos + i > 19) // prevenct messing with data outside of playfeild
+        if (yPos + i > 20) // prevenct messing with data outside of playfeild
           break;
         patternMask = patternMaskMaker(xPos, i);
         playFeild[yPos + i] = playFeild[yPos + i] | patternMask;
@@ -306,11 +329,12 @@ void gameLogic()
 
       // check if playfeild has any full rows
       int8_t i, count = yPos; // i is for for loop and count is what row to put it on
-      for (i = yPos; i < 20; i++)
+      for (i = yPos; i <= 20; i++)
       {
         // when row is full, go to begining of loop
         if ((playFeild[i] & 0x03ff) == 0x03ff) // when
         {
+          lineCleared = lineCleared + 1;
           continue;
         }
         // put i pointer into count pointer
@@ -319,30 +343,113 @@ void gameLogic()
       }
       // return i - count;
 
+      // finds out what level it is on
+      level = lineCleared / 10;
+
+      // change game speed based on what level
+      // if (level < 9)
+      // {
+      //   updateTime = 48 - level * 5;
+      // }
+      // else if (level == 9)
+      // {
+      //   updateTime = 6;
+      // }
+      // else if (level <= 12)
+      // {
+      //   updateTime = 5;
+      // }
+      // else if (level <= 15)
+      // {
+      //   updateTime = 4;
+      // }
+      // else if (level <= 18)
+      // {
+      //   updateTime = 3;
+      // }
+      // else if (level <= 28)
+      // {
+      //   updateTime = 2;
+      // }
+      // else
+      // {
+      //   updateTime = 1;
+      // }
+      // if (level < 9)
+      // {
+      //   updateTime = 48 - level * 5;
+      // }
+      // if (level >= 9){
+      //   // level = level +1;
+      //   updateTime = 9 - ((level) / 3);
+      //   // level = level -1;
+      // }
+      // if (level > 21){
+      //   updateTime = updateTime +1;
+      // }
+
+      if (level == 9)
+      {
+        updateTime = 6;
+      }
+      if (level > 9) // 10 - 12
+      {
+        updateTime = 5;
+      }
+      if (level > 12) // 13 - 15
+      {
+        updateTime = 4;
+      }
+      if (level > 15) // 16 - 18
+      {
+        updateTime = 3;
+      }
+      if (level > 18) // 19 - 28
+      {
+        updateTime = 2;
+      }
+      if (level > 28) // 29 +
+      {
+        updateTime = 1;
+      }
+
       // setup piece for next cylce
       xPos = 3;
-      yPos = i; // yPos = i;
-      peice = (peiceCounter >> 2);
-      if (peice > 6)
-        peice = peice - 7;
+      yPos = 20; // yPos = i;
+      peice = nextPiece;
+      // if (peice > 6){
+      //   peice = peice - 7;
       rotation = peiceCounter & 3;
+      nextPiece = (((peiceCounter)) ^ adcRNG) & 7;
+      if (nextPiece == 7)
+      {
+        nextPiece = (((peiceCounter)) ^ (adcRNG + 1)) & 7;
+      }
+
+      // game over, reset microcontroller
+      if (playFeild[20] != 0)
+      {
+        ccp_write_io((void *)&(RSTCTRL.SWRR), 1); // reset the microcontroller
+      }
     }
   }
-  if ((peiceCounter >> 2) == 7)
-  {
-    peiceCounter = 0;
-  }
+  // if ((peiceCounter >> 2) == 7)
+  // {
+  //   peiceCounter = 0;
+  // }
   // status = 0;
   rowCycleCounter = 29;
 #ifdef DEBUG
-  playFeild[14] = (playFeild[14]) | (((buttonStatus & 0xf)) << 10);
-  playFeild[8] = (playFeild[8] & 0x03ff) | (validMove(xPos + 1, yPos) << 10) | (validMove(xPos, yPos + 1) << 11); // display y value
-  playFeild[9] = (playFeild[9] & 0x03ff) | (validMove(xPos - 1, yPos) << 10) | (validMove(xPos, yPos - 1) << 11); // display y value
-  playFeild[10] = (playFeild[10] & 0x03ff) | (yPos << 10);                                                        // display y value
-  playFeild[11] = (playFeild[11] & 0x03ff) | (xPos << 10);
-  playFeild[12] = (playFeild[12] & 0x03ff) | ((adcRead & 0b00001111) << 10);        // display x value
-  playFeild[13] = (playFeild[13] & 0x03ff) | ((adcRead & ~0b00001111) << (10 - 4)); // display x value
+  // playFeild[14] = (playFeild[14]) | (((buttonStatus & 0xf)) << 10);
+  // playFeild[8] = (playFeild[8] & 0x03ff) | (validMove(xPos + 1, yPos) << 10) | (validMove(xPos, yPos + 1) << 11); // display y value
+  // playFeild[9] = (playFeild[9] & 0x03ff) | (validMove(xPos - 1, yPos) << 10) | (validMove(xPos, yPos - 1) << 11); // display y value
+  // playFeild[10] = (playFeild[10] & 0x03ff) | (yPos << 10);                                                        // display y value
+  // playFeild[11] = (playFeild[11] & 0x03ff) | (xPos << 10);
+  playFeild[12] = (playFeild[12] & 0x03ff) | ((adcRead & 0b00001111) << 10);  // display x value
+  playFeild[13] = (playFeild[13] & 0x03ff) | ((adcRNG & 0b00001111) << (10)); // display x value
 #endif
+
+  TCD0.INTCTRL = 1 << TCD_OVF_bp; // turn on the hsync interput
 }
 
 // trigger at the begining of every scanline
@@ -441,9 +548,14 @@ ISR(TCD0_OVF_vect)
           "LSR %B0\n"    // right shift upper feildDisplay    (1 cycle)
           "BLD %A0, 7\n" // put t reginer in to lower feildDisplay bit 7    (1 cycle)
 
-          "INC %1\n"     // inc i    (1 cycle)
-          "rjmp loop2\n" // go to begin of loop  (3 cycle)
-          "next2: NOP\n" // go here when done with loop
+          "INC %1\n"       // inc i    (1 cycle)
+          "rjmp loop2\n"   // go to begin of loop  (3 cycle)
+          "next2: NOP\n"   // go here when done with loop
+          "INC %1\n"       // inc i    (1 cycle)
+          "INC %1\n"       // inc i    (1 cycle)
+          "INC %1\n"       // inc i    (1 cycle)
+          "INC %1\n"       // inc i    (1 cycle)
+          "OUT 0x01, %1\n" // put i in the output, i will be a (2 or 10) and will turn off diplay and enable vsync output, saveing 4 bytes of flash
 
           // "cbi 0x01, 7\n" // turn off output (looks nicer)    (1 cycle)
           // "SBI 0x01, 7\n" // turn on output to make boarder    (1 cycle)
@@ -456,7 +568,7 @@ ISR(TCD0_OVF_vect)
           // "NOP\n"
           // "cbi 0x01, 7\n" // turn off output (looks nicer)    (1 cycle)
           : "+r"((uint16_t)(feildDisplay)), "=r"((uint8_t)(i)));
-      VPORTA_OUT = 0;
+      // VPORTA_OUT = 0;
 #endif
     }
     rowCycleCounter--;
@@ -476,7 +588,7 @@ int main(void)
   PORTA.PIN3CTRL = PORT_PULLUPEN_bm;
 
   // set up v sync counter
-  TCA0.SINGLE.CMP0 = 600; /* Compare Register 0: 0x258 */
+  // TCA0.SINGLE.CMP0 = 600; /* Compare Register 0: 0x258 */
   TCA0.SINGLE.CMP1 = 601; /* Compare Register 1: 0x259 */
   TCA0.SINGLE.CMP2 = 605; /* Compare Register 2: 0x25d */
   // TCA0.SINGLE.CNT = 0x0; /* Count: 0x0 */
@@ -520,9 +632,8 @@ int main(void)
                    | 0 << TCD_CMPD_bp   /* Compare D vaule: disabled */
                    | 0 << TCD_CMPDEN_bp /* Compare D enable: disabled */);
 
-  TCD0.INTCTRL = 1 << TCD_OVF_bp      /* Overflow interrupt enable: enabled */
-                 | 0 << TCD_TRIGA_bp  /* Trigger A interrupt enable: enabled */
-                 | 0 << TCD_TRIGB_bp; /* Trigger B interrupt enable: enabled */
+  TCD0.INTCTRL = 1 << TCD_OVF_bp; /* Overflow interrupt enable: enabled */
+
   // while ((TCD0.STATUS & TCD_ENRDY_bm) == 0)
   //   ; // Wait for Enable Ready to be high.
 
@@ -551,9 +662,9 @@ int main(void)
   // setting up ADC now happens in TCD0 OVF int to save space
   // set up adc/button pin
   // PORTA.PIN2CTRL = 0x4; // set pin 2 to disable digital input
-  ADC0.CTRLA = 0b00000111;
+  ADC0.CTRLA = 0b00000011;
   // ADC0.CTRLB = 1;
-  ADC0.CTRLC = 0b01010011;
+  ADC0.CTRLC = 0b01010010;
   // ADC0.CTRLD = 0b00010000;
   SLPCTRL.CTRLA = 1; // enable sleep
                      // this part of the adc set up is done in TCD0 OVF int to save space and waste time there
@@ -592,6 +703,7 @@ ISR(TCA0_CMP1_vect)
 // vsync off
 ISR(TCA0_CMP2_vect)
 {
+  TCD0.INTCTRL = 0;       // turn off the hsync interput
   VPORTA.DIR = COLOR_PIN; // disable the vsync output
   TCA0.SINGLE.INTFLAGS = TCA_SINGLE_CMP2_bm;
   gameLogic(); // starts doing the game logic
